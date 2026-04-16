@@ -202,6 +202,10 @@ def engineer_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     dir_exp = train_df.groupby("director").size().to_dict()
     star_exp = train_df.groupby("star").size().to_dict()
     wri_exp = train_df.groupby("writer").size().to_dict()
+    
+    # Save experience dicts
+    import joblib
+    joblib.dump({"director": dir_exp, "star": star_exp, "writer": wri_exp}, os.path.join(OUTPUT_DIR, "experience_dicts.pkl"))
 
     for df in [train_df, test_df]:
         df["director_exp"] = df["director"].map(dir_exp).fillna(1)
@@ -254,9 +258,10 @@ def kfold_target_encode(train_s, target, test_s,
         (full_agg["count"] * full_agg["mean"] + smoothing * global_mean)
         / (full_agg["count"] + smoothing)
     )
-    test_encoded = test_s.map(full_agg["smooth"].to_dict()).fillna(global_mean)
+    final_mapping = full_agg["smooth"].to_dict()
+    test_encoded = test_s.map(final_mapping).fillna(global_mean)
 
-    return train_encoded, test_encoded
+    return train_encoded, test_encoded, final_mapping, global_mean
 
 
 def encode_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
@@ -291,18 +296,25 @@ def encode_features(train_df: pd.DataFrame, test_df: pd.DataFrame):
     high_card = ["director", "writer", "star", "company", "country"]
     log_target = np.log1p(train_df["gross"])
 
+    target_encodings = {}
+
     for col in high_card:
         train_df[col] = train_df[col].fillna("Unknown")
         test_df[col] = test_df[col].fillna("Unknown")
 
-        tr_enc, te_enc = kfold_target_encode(
+        tr_enc, te_enc, f_map, g_mean = kfold_target_encode(
             train_df[col], log_target, test_df[col],
             n_splits=5, smoothing=50
         )
+        target_encodings[col] = {"mapping": f_map, "global_mean": g_mean}
+        
         # Keep ONLY log-encoded version (matches log-target scale, no redundancy)
         train_df[f"{col}_enc"] = tr_enc
         test_df[f"{col}_enc"] = te_enc
-        # NO _enc_log, NO _freq, NO _avg_gross -- those caused multicollinearity
+
+    import joblib
+    joblib.dump(ohe, os.path.join(OUTPUT_DIR, "ohe.pkl"))
+    joblib.dump(target_encodings, os.path.join(OUTPUT_DIR, "target_encodings.pkl"))
 
     print(f"  K-fold target-encoded ({', '.join(high_card)}): "
           f"{len(high_card)} columns (1 per feature, zero redundancy)")
@@ -765,6 +777,12 @@ def main():
     print(f"  MAE  = ${b['MAE']:,.0f}")
 
     # Save outputs
+    import joblib
+    joblib.dump(advanced_models.get("LightGBM"), os.path.join(OUTPUT_DIR, "lgb_model.pkl"))
+    joblib.dump(baseline_models.get("RandomForest"), os.path.join(OUTPUT_DIR, "rf_model.pkl"))
+    joblib.dump(baseline_models.get("LinearRegression"), os.path.join(OUTPUT_DIR, "lr_model.pkl"))
+    joblib.dump(feature_cols, os.path.join(OUTPUT_DIR, "feature_cols.pkl"))
+
     pd.DataFrame({
         "actual": y_test.values, "predicted": final_preds,
         "error": y_test.values - final_preds

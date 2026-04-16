@@ -1,0 +1,22 @@
+# Specific pipeline versions
+movie_analysis/movie_ml_pipeline_v*.py
+
+# Generated outputs
+movie_analysis/pipeline_outputs/
+
+# Datasets (if you don't want to track large CSVs)
+# movie_analysis/datasets/*.csv
+
+# Python general
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
